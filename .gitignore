@@ -1,0 +1,12 @@
+# PyCharm
+.idea/
+
+# Python
+.venv/
+venv/
+
+__pycache__/
+*.pyc
+
+# Windows
+Thumbs.db
