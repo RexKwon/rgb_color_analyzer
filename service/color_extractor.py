@@ -11,4 +11,4 @@ def extract_colors(file_path):
         for y in range(height):
             rgb = image.getpixel((x, y))
             colors.add(rgb)
-    return sorted(colors)
+    return colors
