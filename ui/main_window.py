@@ -1,8 +1,12 @@
 import os
+import time
 from PySide6.QtCore import Qt
 from service.color_extractor import extract_colors
 from service.color_compare import compare_colors
-from PySide6.QtGui import QColor, QBrush
+from service.color_locator import create_color_mask
+from PySide6.QtGui import QColor, QBrush, QPixmap
+from PIL.ImageQt import ImageQt
+from PIL import Image
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -16,7 +20,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QFileDialog,
-    QSplitter
+    QSplitter,
+    QTabWidget,
+    QLineEdit
 )
 
 class MainWindow(QMainWindow):
@@ -28,6 +34,11 @@ class MainWindow(QMainWindow):
         self.common_colors = set()
         self.color_map = {}
         self.diff_colors = {}
+        self.locator_file = None
+
+        self.locator_colors_all = []
+        self.locator_pixmap = None
+        self.locator_image = None
         self.setWindowTitle("RGB Color Analyzer")
         self.resize(1000, 700)
 
@@ -35,7 +46,39 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(center_widget)
 
         main_layout = QVBoxLayout()
+        self.tabs = QTabWidget()
+        self.tab_compare = QWidget()
+        self.tab_locator = QWidget()
+        self.btn_locator_file = QPushButton(
+            "이미지 선택"
+        )
+        self.list_locator_color = QListWidget()
 
+        self.input_locator_search = QLineEdit()
+        self.input_locator_search.setPlaceholderText(
+            "RGB 검색"
+        )
+
+        self.label_locator_image = QLabel()
+        self.label_locator_image.setMinimumHeight(
+            300
+        )
+        self.label_locator_image.setAlignment(
+            Qt.AlignCenter
+        )
+        self.label_locator_image.setText(
+            "이미지 미리보기"
+        )
+
+        self.tabs.addTab(
+            self.tab_compare,
+            "RGB 비교 분석"
+        )
+        self.tabs.addTab(
+            self.tab_locator,
+            "색상 위치 확인"
+        )
+        compare_layout = QVBoxLayout()
         button_layout = QHBoxLayout()
 
         self.btn_file = QPushButton("파일 선택")
@@ -47,6 +90,15 @@ class MainWindow(QMainWindow):
         self.btn_folder.clicked.connect(self.select_folder)
         self.btn_analyze.clicked.connect(self.analyze_files)
         self.btn_copy.clicked.connect(self.copy_colors)
+        self.btn_locator_file.clicked.connect(
+            self.select_locator_image
+        )
+        self.list_locator_color.itemClicked.connect(
+            self.show_locator_color
+        )
+        self.input_locator_search.textChanged.connect(
+            self.filter_locator_colors
+        )
 
         button_layout.addWidget(self.btn_file)
         button_layout.addWidget(self.btn_folder)
@@ -66,18 +118,45 @@ class MainWindow(QMainWindow):
             self.show_file_detail
         )
 
-        main_layout.addLayout(button_layout)
-        main_layout.addWidget(self.label_file)
-        main_layout.addWidget(self.list_file)
-        main_layout.addWidget(self.label_result)
+        compare_layout.addLayout(button_layout)
+        compare_layout.addWidget(self.label_file)
+        compare_layout.addWidget(self.list_file)
+        compare_layout.addWidget(self.label_result)
         splitter = QSplitter()
         splitter.addWidget(self.list_result)
         splitter.addWidget(self.text_result)
         splitter.setSizes([300, 700])
-        main_layout.addWidget(splitter)
-        main_layout.addWidget(self.label_color)
-        main_layout.addWidget(self.list_color)
-        main_layout.addWidget(self.label_status)
+        compare_layout.addWidget(splitter)
+        compare_layout.addWidget(self.label_color)
+        compare_layout.addWidget(self.list_color)
+        compare_layout.addWidget(self.label_status)
+
+        self.tab_compare.setLayout(
+            compare_layout
+        )
+        main_layout.addWidget(
+            self.tabs
+        )
+
+        locator_layout = QVBoxLayout()
+        locator_layout.addWidget(
+            self.btn_locator_file
+        )
+        locator_layout.addWidget(
+            QLabel("RGB 목록")
+        )
+        locator_layout.addWidget(
+            self.input_locator_search
+        )
+        locator_layout.addWidget(
+            self.list_locator_color
+        )
+        locator_layout.addWidget(
+            self.label_locator_image
+        )
+        self.tab_locator.setLayout(
+            locator_layout
+        )
 
         center_widget.setLayout(main_layout)
 
@@ -124,7 +203,7 @@ class MainWindow(QMainWindow):
                 self.list_file.addItem(file_path)
 
     def analyze_files(self):
-
+        start_time = time.time()
         if not self.file_list:
             return
 
@@ -135,7 +214,20 @@ class MainWindow(QMainWindow):
 
         color_map = {}
 
-        for file_path in self.file_list:
+        total_count = len(
+            self.file_list
+        )
+
+        for idx, file_path in enumerate(
+                self.file_list,
+                start=1
+        ):
+            self.label_status.setText(
+                f"분석 중입니다... ({idx}/{total_count})"
+            )
+
+            QApplication.processEvents()
+
             colors = extract_colors(file_path)
 
             color_map[file_path] = colors
@@ -178,7 +270,13 @@ class MainWindow(QMainWindow):
         )
 
         self.list_result.setCurrentRow(0)
-        self.label_status.setText("분석 완료")
+        elapsed_time = round(
+            time.time() - start_time,
+            2
+        )
+        self.label_status.setText(
+            f"분석 완료 ({elapsed_time}초)"
+        )
         self.btn_analyze.setEnabled(True)
         QApplication.restoreOverrideCursor()
 
@@ -277,3 +375,149 @@ class MainWindow(QMainWindow):
             self.text_result.append(
                 f"RGB{rgb}"
             )
+
+    def select_locator_image(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "이미지 선택",
+            "",
+            "Image Files (*.png *.tga)"
+        )
+        if not file_path:
+            return
+        self.locator_file = file_path
+        self.locator_image = Image.open(file_path).convert("RGB")
+        pixmap = QPixmap(file_path)
+        self.locator_pixmap = pixmap
+        if not pixmap.isNull():
+            self.label_locator_image.setPixmap(
+                pixmap.scaled(
+                    500,
+                    500,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+            )
+        colors = extract_colors(
+            file_path
+        )
+
+        self.locator_colors_all = sorted(
+            colors
+        )
+
+        self.input_locator_search.clear()
+
+        self.load_locator_color_list(
+            self.locator_colors_all
+        )
+
+    def show_locator_color(self, item):
+        if not self.locator_file:
+            return
+
+        if item.text() == "[전체 색상]":
+            self.label_locator_image.setPixmap(
+                self.locator_pixmap.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
+            return
+
+        rgb_text = item.text()
+        rgb_text = (
+            rgb_text
+            .replace("RGB(", "")
+            .replace(")", "")
+        )
+        rgb = tuple(
+            map(
+                int,
+                rgb_text.split(",")
+            )
+        )
+        result_image = create_color_mask(
+            self.locator_image,
+            rgb
+        )
+        qt_image = ImageQt(
+            result_image
+        )
+        pixmap = QPixmap.fromImage(
+            qt_image
+        )
+        self.label_locator_image.setPixmap(
+            pixmap.scaled(
+                500,
+                500,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+        )
+
+    def load_locator_color_list(
+            self,
+            colors
+    ):
+
+        self.list_locator_color.clear()
+
+        self.list_locator_color.addItem(
+            "[전체 색상]"
+        )
+
+        for rgb in colors:
+
+            item = QListWidgetItem(
+                f"RGB{rgb}"
+            )
+
+            color = QColor(
+                rgb[0],
+                rgb[1],
+                rgb[2]
+            )
+
+            item.setBackground(
+                QBrush(color)
+            )
+
+            brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000
+
+            if brightness < 128:
+                item.setForeground(
+                    QBrush(QColor(255, 255, 255))
+                )
+            else:
+                item.setForeground(
+                    QBrush(QColor(0, 0, 0))
+                )
+
+            self.list_locator_color.addItem(
+                item
+            )
+
+    def filter_locator_colors(self):
+
+        keyword = (
+            self.input_locator_search.text()
+            .strip()
+        )
+
+        filtered_colors = []
+
+        for rgb in self.locator_colors_all:
+
+            rgb_text = (
+                f"{rgb[0]},{rgb[1]},{rgb[2]}"
+            )
+
+            if keyword:
+                if keyword not in rgb_text:
+                    continue
+
+            filtered_colors.append(
+                rgb
+            )
+
+        self.load_locator_color_list(
+            filtered_colors
+        )
