@@ -22,8 +22,102 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QSplitter,
     QTabWidget,
-    QLineEdit
+    QLineEdit,
+    QGraphicsView,
+    QGraphicsScene
 )
+
+class ImageZoomView(QGraphicsView):
+
+    def __init__(self):
+        super().__init__()
+
+        self.setInteractive(
+            False
+        )
+
+        self.drag_enabled = False
+        self.dragging = False
+        self.drag_pos = None
+
+    def enable_drag(self):
+
+        self.drag_enabled = True
+
+        if not self.dragging:
+            self.setCursor(
+                Qt.OpenHandCursor
+            )
+
+    def disable_drag(self):
+
+        self.drag_enabled = False
+        self.dragging = False
+        self.drag_pos = None
+
+        self.setCursor(
+            Qt.ArrowCursor
+        )
+
+    def wheelEvent(self, event):
+
+        if event.angleDelta().y() > 0:
+            self.scale(
+                1.25,
+                1.25
+            )
+        else:
+            self.scale(
+                0.8,
+                0.8
+            )
+
+    def mousePressEvent(self, event):
+        if (
+                self.drag_enabled and
+                event.button() == Qt.LeftButton
+        ):
+            self.dragging = True
+            self.drag_pos = event.pos()
+            self.setCursor(
+                Qt.ClosedHandCursor
+            )
+
+            return
+
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            delta = (
+                    event.pos() -
+                    self.drag_pos
+            )
+            self.drag_pos = event.pos()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value()
+                - delta.x()
+            )
+            self.verticalScrollBar().setValue(
+                self.verticalScrollBar().value()
+                - delta.y()
+            )
+
+            return
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self.dragging:
+            self.dragging = False
+            if self.drag_enabled:
+                self.setCursor(
+                    Qt.OpenHandCursor
+                )
+
+            return
+
+        super().mouseReleaseEvent(event)
 
 class MainWindow(QMainWindow):
 
@@ -59,15 +153,17 @@ class MainWindow(QMainWindow):
             "RGB 검색"
         )
 
-        self.label_locator_image = QLabel()
-        self.label_locator_image.setMinimumHeight(
+        self.scene_locator_image = QGraphicsScene()
+        self.view_locator_image = ImageZoomView()
+        self.view_locator_image.setScene(
+            self.scene_locator_image
+        )
+        self.view_locator_image.setMinimumHeight(
             300
         )
-        self.label_locator_image.setAlignment(
-            Qt.AlignCenter
-        )
-        self.label_locator_image.setText(
-            "이미지 미리보기"
+
+        self.view_locator_image.setFocusPolicy(
+            Qt.StrongFocus
         )
 
         self.tabs.addTab(
@@ -152,13 +248,23 @@ class MainWindow(QMainWindow):
             self.list_locator_color
         )
         locator_layout.addWidget(
-            self.label_locator_image
+            self.view_locator_image
         )
         self.tab_locator.setLayout(
             locator_layout
         )
 
         center_widget.setLayout(main_layout)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Space:
+            self.view_locator_image.enable_drag()
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key_Space:
+            self.view_locator_image.disable_drag()
+        super().keyReleaseEvent(event)
 
     def select_files(self):
 
@@ -390,13 +496,8 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap(file_path)
         self.locator_pixmap = pixmap
         if not pixmap.isNull():
-            self.label_locator_image.setPixmap(
-                pixmap.scaled(
-                    500,
-                    500,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
-                )
+            self.show_locator_pixmap(
+                pixmap
             )
         colors = extract_colors(
             file_path
@@ -417,8 +518,8 @@ class MainWindow(QMainWindow):
             return
 
         if item.text() == "[전체 색상]":
-            self.label_locator_image.setPixmap(
-                self.locator_pixmap.scaled(500, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.show_locator_pixmap(
+                self.locator_pixmap
             )
             return
 
@@ -444,13 +545,25 @@ class MainWindow(QMainWindow):
         pixmap = QPixmap.fromImage(
             qt_image
         )
-        self.label_locator_image.setPixmap(
-            pixmap.scaled(
-                500,
-                500,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
+        self.show_locator_pixmap(
+            pixmap
+        )
+
+    def show_locator_pixmap(
+            self,
+            pixmap
+    ):
+        self.view_locator_image.resetTransform()
+        self.scene_locator_image.clear()
+        self.scene_locator_image.addPixmap(
+            pixmap
+        )
+        self.scene_locator_image.setSceneRect(
+            pixmap.rect()
+        )
+        self.view_locator_image.fitInView(
+            self.scene_locator_image.sceneRect(),
+            Qt.KeepAspectRatio
         )
 
     def load_locator_color_list(
