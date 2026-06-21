@@ -1,40 +1,82 @@
 from PIL import Image
+import numpy as np
 
 HIGHLIGHT_RGB = (
     255,
     0,
-    255
+    0
 )
 
-def create_color_mask(
-    image,
-    target_rgb
-):
+WHITE_BLEND_RATE = 0.5
 
-    width, height = image.size
 
-    pixels = image.getdata()
+class ColorLocatorEngine:
 
-    result_pixels = []
+    def __init__(self):
+        self.image = None
+        self.image_array = None
+        self.base_array = None
 
-    for rgb in pixels:
+    def load_image(
+            self,
+            file_path
+    ):
+        self.clear()
 
-        if rgb == target_rgb:
-            result_pixels.append(
-                HIGHLIGHT_RGB
-            )
-        else:
-            result_pixels.append(
-                (0, 0, 0)
-            )
+        self.image = Image.open(file_path).convert("RGB")
 
-    result = Image.new(
-        "RGB",
-        (width, height)
-    )
+        self.image_array = np.asarray(
+            self.image,
+            dtype=np.uint8
+        )
 
-    result.putdata(
-        result_pixels
-    )
+        self.base_array = self.create_base_array(
+            self.image_array
+        )
 
-    return result
+    def clear(self):
+        self.image = None
+        self.image_array = None
+        self.base_array = None
+
+    def has_image(self):
+        return self.image_array is not None
+
+    def create_mask_image(
+            self,
+            target_rgb
+    ):
+        if self.image_array is None:
+            return None
+
+        target = np.array(
+            target_rgb,
+            dtype=np.uint8
+        )
+
+        result_array = self.base_array.copy()
+
+        mask = np.all(
+            self.image_array == target,
+            axis=2
+        )
+
+        result_array[mask] = HIGHLIGHT_RGB
+
+        return Image.fromarray(
+            result_array,
+            "RGB"
+        )
+
+    def create_base_array(
+            self,
+            image_array
+    ):
+        base_array = (
+                image_array.astype(np.float32) * (1 - WHITE_BLEND_RATE)
+                + 255 * WHITE_BLEND_RATE
+        )
+
+        return base_array.astype(
+            np.uint8
+        )
