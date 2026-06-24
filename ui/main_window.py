@@ -194,7 +194,7 @@ class MainWindow(QMainWindow):
 
         self.input_locator_search = QLineEdit()
         self.input_locator_search.setPlaceholderText(
-            "RGB 검색"
+            "RGB/RGBA 검색"
         )
 
         self.search_timer = QTimer()
@@ -726,20 +726,20 @@ class MainWindow(QMainWindow):
             )
             return
 
-        rgb_text = []
+        color_text = []
 
-        for rgb in self.analysis_result.sorted_common_colors:
-            rgb_text.append(
-                self.format_rgb_text(rgb)
+        for color in self.analysis_result.sorted_common_colors:
+            color_text.append(
+                self.format_color_text(color)
             )
 
         clipboard = QApplication.clipboard()
         clipboard.setText(
-            "\n".join(rgb_text)
+            "\n".join(color_text)
         )
 
         self.label_status.setText(
-            f"공통 색상 {len(rgb_text)}개 복사 완료"
+            f"공통 색상 {len(color_text)}개 복사 완료"
         )
 
     def change_result_item(
@@ -829,9 +829,9 @@ class MainWindow(QMainWindow):
             ""
         ]
 
-        for rgb in sorted_diff_colors:
+        for color in sorted_diff_colors:
             lines.append(
-                self.format_rgb_text(rgb)
+                self.format_color_text(color)
             )
 
         self.set_result_text(
@@ -868,15 +868,15 @@ class MainWindow(QMainWindow):
         if not self.locator_engine.has_image():
             return
 
-        rgb = item.data(
+        color = item.data(
             Qt.UserRole
         )
 
-        if rgb is None:
+        if color is None:
             return
 
         result_image = self.locator_engine.create_mask_image(
-            rgb
+            color
         )
 
         if result_image is None:
@@ -947,11 +947,19 @@ class MainWindow(QMainWindow):
     ):
         search_items = []
 
-        for rgb in colors:
+        for color in colors:
+            color_text = self.format_color_text(
+                color
+            )
+            color_values_text = ",".join(
+                str(value)
+                for value in color
+            )
+
             search_items.append(
                 (
-                    rgb,
-                    f"{rgb[0]},{rgb[1]},{rgb[2]}"
+                    color,
+                    f"{color_text} {color_values_text}".lower()
                 )
             )
 
@@ -987,11 +995,13 @@ class MainWindow(QMainWindow):
             common_colors
         )
 
-    def format_rgb_text(
+    def format_color_text(
             self,
-            rgb
+            color
     ):
-        return f"RGB{rgb}"
+        if len(color) >= 4 and color[3] < 255:
+            return f"RGBA{color}"
+        return f"RGB({color[0]}, {color[1]}, {color[2]})"
 
     def filter_color_list(
             self,
@@ -999,15 +1009,16 @@ class MainWindow(QMainWindow):
             keyword
     ):
         filtered_colors = []
+        keyword = keyword.lower()
 
-        for rgb, rgb_text in search_items:
+        for color, color_text in search_items:
 
             if keyword:
-                if keyword not in rgb_text:
+                if keyword not in color_text:
                     continue
 
             filtered_colors.append(
-                rgb
+                color
             )
 
         return filtered_colors

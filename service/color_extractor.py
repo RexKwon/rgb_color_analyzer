@@ -4,10 +4,12 @@ def extract_colors(file_path):
 
     with Image.open(file_path) as image:
 
-        image = image.convert("RGB")
+        image = image.convert("RGBA")
 
-        colors = set(
-            image.getdata()
-        )
+        colors = {
+            color
+            for color in image.getdata()
+            if color[3] > 0
+        }
 
     return colors

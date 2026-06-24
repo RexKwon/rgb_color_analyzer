@@ -23,7 +23,7 @@ class ColorLocatorEngine:
     ):
         self.clear()
 
-        self.image = Image.open(file_path).convert("RGB")
+        self.image = Image.open(file_path).convert("RGBA")
 
         self.image_array = np.asarray(
             self.image,
@@ -44,13 +44,23 @@ class ColorLocatorEngine:
 
     def create_mask_image(
             self,
-            target_rgb
+            target_color
     ):
         if self.image_array is None:
             return None
 
+        if len(target_color) == 3:
+            target_color = (
+                target_color[0],
+                target_color[1],
+                target_color[2],
+                255
+            )
+        if len(target_color) != 4:
+            return None
+
         target = np.array(
-            target_rgb,
+            target_color,
             dtype=np.uint8
         )
 
@@ -72,8 +82,19 @@ class ColorLocatorEngine:
             self,
             image_array
     ):
+        rgb_array = image_array[:, :, :3].astype(
+            np.float32
+        )
+        alpha_array = image_array[:, :, 3:4].astype(
+            np.float32
+        ) / 255.0
+        visible_array = (
+                rgb_array * alpha_array
+                + 255 * (1 - alpha_array)
+        )
+
         base_array = (
-                image_array.astype(np.float32) * (1 - WHITE_BLEND_RATE)
+                visible_array * (1 - WHITE_BLEND_RATE)
                 + 255 * WHITE_BLEND_RATE
         )
 
